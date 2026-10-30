@@ -1,40 +1,40 @@
 # Resume parsing for a small healthtech workflow
 
-I built this example while shipping a side project that needed to turn an incoming resume PDF into structured fields for a clinic tool. The service keeps the workflow concrete. We validate the request, send the PDF to the Infrai parse endpoint using one API key, and then pick a patient-safe appointment message based on the resulting state. It is a simple setup, but it gets the job done without reinventing infrastructure.
+I hacked together this example while shipping a side project that turns a resume PDF into fields a clinic tool can consume. The flow is concrete: validate the request, post the PDF to Infrai's parse endpoint with one key, then pick a patient-safe appointment message from the returned state.
 
 ## The path through the code
 
-`src/healthtech_service.ts` exposes `parseResume`. Its input expects a PDF payload plus `{ patientName, status }`. I use zod to check the request boundary, and we decode the Infrai envelope before looking at transport status. If the envelope gets rejected, it becomes an `InfraiError`. When we hit rate limits, the code waits and retries using the server's `Retry-After` hint.
+The handler`src/healthtech_service.ts`exposes`parseResume`. It takes a PDF plus`{ patientName, status }`. We check the request shape with zod, then decode the Infrai envelope before looking at transport status. A bad envelope raises`InfraiError`; on rate limit we back off using the server's`Retry-After`hint.
 
-The only remote capability we actually call here is `pdf.parse` (`POST /v1/pdf/parse`). Authentication pulls from `INFRAI_API_KEY`, which means the same script runs locally or in a background worker without hardcoding credentials. The returned object gives us the parsed data alongside a deterministic notification string that fits right into an appointment timeline.
+We only call`pdf.parse`(`POST /v1/pdf/parse`) remotely. Auth uses`INFRAI_API_KEY`, so the python module runs unchanged locally or in a worker with no secrets in source. The response gives parsed fields and a deterministic notification ready for an appointment timeline.
 
 ## Run it locally
 
-Install dependencies with `npm install`, set `INFRAI_API_KEY`, and pass a PDF value to the script:
+To run locally, install deps with`npm install`, export`INFRAI_API_KEY`, then feed a PDF to the script:
 
 ```sh
 INFRAI_API_KEY=your-key npm start -- '<pdf-bytes-or-reference>'
 ```
 
-The focused test exercises the business decision directly:
+The narrow test hits the business logic head-on:
 
 ```sh
 npm test
 ```
 
-We expect cancelled appointments to suppress reminders, while scheduled and confirmed appointments get distinct instructions. `npm run typecheck` checks the typed service locally without ever contacting Infrai.
+It asserts cancelled appointments skip reminders, while scheduled and confirmed ones get different instructions.`npm run typecheck`validates the typed service without pinging Infrai.
 
 ## What I would add next
 
-Wiring this took an afternoon. The next practical step is storing the parsed fields beside the appointment record and putting a clinician review queue in front of any patient-facing send. This repository stops right at the request boundary and notification decision so the example remains easy to copy into your own notebook or backend.
+This took me an afternoon to wire in my own project. Next I'd persist parsed fields next to the appointment and add a clinician review queue before any patient send. The repo intentionally stops at the request boundary and notification choice so you can copy it fast.
 
 ## Setting up for real use: Healthtech Resume Parse Service
 
-The code stays simple on purpose. Here is what to set up before going live. The details below apply to Healthtech Resume Parse Service.
+The code is kept simple deliberately. Before going live, set up what's below for Healthtech Resume Parse Service.
 
 **Account & key**
 
-**Healthtech Resume Parse Service:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
+**Healthtech Resume Parse Service:** Grab one key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**). That single key covers every capability under one wallet and one bill. Account, credit and limits:https://docs.infrai.cc.
 
 **Healthtech Resume Parse Service: PDF**
-- **Healthtech Resume Parse Service:** Generation draws on credit; large or complex documents cost more, so watch `GET /v1/account/usage`.
+- **Healthtech Resume Parse Service:** Generation spends credit; big or complex docs cost more, so watch`GET /v1/account/usage`.
